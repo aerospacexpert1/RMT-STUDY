@@ -67,15 +67,28 @@ def patch_line(line: str, rel: str) -> str:
         line = line.replace("RMT_TRUBA_96CASE", "RMT_IMPROVED_S6_TRUBA_96CASE")
         path_changes += n
 
-    # Fixed smoothing experiment.  Restrict numeric edits to lines whose
-    # semantics explicitly mention smoothing/sweeps and RMT/finalvol context.
-    low = line.lower()
-    semantic = (
-        ("smooth" in low or "sweep" in low)
-        and ("rmt" in low or "finalvol" in low or "post" in low)
-    )
-    if semantic and re.search(r"(?<![\w.])16(?![\w.])", line):
-        line, nsub = re.subn(r"(?<![\w.])16(?![\w.])", "6", line)
+    # Change ONLY assignments/defaults/options whose identifier itself refers
+    # to smoothing/sweeps. Do not blanket-replace "16" on a line because a
+    # line may also contain the 16-thread campaign setting.
+    patterns = [
+        # C/Python/shell assignment: rmt_smoothing_sweeps = 16
+        r"(?i)(\b[A-Za-z_][A-Za-z0-9_]*(?:smooth|sweep)[A-Za-z0-9_]*\b\s*=\s*)16\b",
+        # Shell parameter default with a smooth/sweep variable and value 16.
+        r"(?i)(\$\{[A-Za-z_][A-Za-z0-9_]*(?:smooth|sweep)[A-Za-z0-9_]*:-)16(\})",
+        # C preprocessor macro.
+        r"(?i)(#define\s+[A-Za-z_][A-Za-z0-9_]*(?:smooth|sweep)[A-Za-z0-9_]*\s+)16\b",
+        # Python/JSON dictionary item.
+        r"""(?i)(["'][^"']*(?:smooth|sweep)[^"']*["']\s*:\s*)16\b""",
+        # CLI option literal.
+        r"(?i)(-rmt\S*(?:smooth|sweep)\S*\s+)16\b",
+        # argparse / constructor fragment with explicit default=16 near keyword.
+        r"(?i)((?:smooth|sweep)[^\n]{0,60}\bdefault\s*=\s*)16\b",
+    ]
+    for pat in patterns:
+        def repl(m):
+            tail = m.group(2) if (m.lastindex or 0) >= 2 else ""
+            return m.group(1) + "6" + tail
+        line, nsub = re.subn(pat, repl, line)
         smooth_changes += nsub
 
     if line != original:
