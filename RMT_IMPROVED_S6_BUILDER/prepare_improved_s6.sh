@@ -12,17 +12,21 @@ TMP="$REPO_ROOT/.rmt_s6_extract_tmp"
     exit 2
 }
 
-command -v 7z >/dev/null 2>&1 || {
-    echo "ERROR: 7z is required. On TRUBA try: module load tools/7zip if available." >&2
-    echo "Or install/use an available 7z/unrar module, then rerun." >&2
-    exit 3
-}
-
 rm -rf "$TMP"
 mkdir -p "$TMP"
 
 echo "===== EXTRACT VALIDATED RMT_FINALVOL2 PACKAGE ====="
-7z x -y "$ARCHIVE" -o"$TMP" >/dev/null
+if command -v 7z >/dev/null 2>&1; then
+    7z x -y "$ARCHIVE" -o"$TMP" >/dev/null
+elif command -v 7zz >/dev/null 2>&1; then
+    7zz x -y "$ARCHIVE" -o"$TMP" >/dev/null
+elif command -v unrar >/dev/null 2>&1; then
+    unrar x -o+ "$ARCHIVE" "$TMP/" >/dev/null
+else
+    echo "ERROR: no RAR extractor found (7z, 7zz, or unrar)." >&2
+    echo "Check available TRUBA modules with: module avail 2>&1 | grep -Ei '7zip|7z|rar'" >&2
+    exit 3
+fi
 
 SRC="$TMP/RMT_TRUBA_96CASE"
 [[ -d "$SRC" ]] || {
