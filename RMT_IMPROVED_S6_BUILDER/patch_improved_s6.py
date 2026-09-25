@@ -142,12 +142,18 @@ for item in audit_roots:
         except UnicodeDecodeError:
             continue
         for no, line in enumerate(lines, 1):
-            low = line.lower()
-            semantic = (
-                ("smooth" in low or "sweep" in low)
-                and ("rmt" in low or "finalvol" in low or "post" in low)
-            )
-            if semantic and re.search(r"(?<![\w.])16(?![\w.])", line):
+            # Re-use the assignment/default semantics of the patch itself.
+            # Historical comments mentioning a 16-sweep baseline do not block
+            # the build; an executable/default setting that still selects 16 does.
+            active_patterns = [
+                r"(?i)(\b[A-Za-z_][A-Za-z0-9_]*(?:smooth|sweep)[A-Za-z0-9_]*\b\s*=\s*)16\b",
+                r"(?i)(\$\{[A-Za-z_][A-Za-z0-9_]*(?:smooth|sweep)[A-Za-z0-9_]*:-)16(\})",
+                r"(?i)(#define\s+[A-Za-z_][A-Za-z0-9_]*(?:smooth|sweep)[A-Za-z0-9_]*\s+)16\b",
+                r"""(?i)(["'][^"']*(?:smooth|sweep)[^"']*["']\s*:\s*)16\b""",
+                r"(?i)(-rmt\S*(?:smooth|sweep)\S*\s+)16\b",
+                r"(?i)((?:smooth|sweep)[^\n]{0,60}\bdefault\s*=\s*)16\b",
+            ]
+            if any(re.search(pat, line) for pat in active_patterns):
                 remaining.append((str(p.relative_to(root)), no, line.strip()))
 
 report = root / "S6_PATCH_REPORT.txt"
