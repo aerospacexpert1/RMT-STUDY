@@ -119,7 +119,7 @@ typedef struct {
     double startTime, endTime, dt0, writeInterval;
     double maxCo, maxDi, dtMax;
     int nOuterCorrectors, nCorrectors; /* retained for CLI compatibility; V95 requires 1 */
-    int poissonIters;                  /* maximum SG-RBGS sweeps per pressure solve */
+    int poissonIters;                  /* maximum pressure-solver iterations/cycles */
     int scalarIters;                   /* scalar cycles */
     int scalarSweepsPerCycle;
 
@@ -1266,7 +1266,9 @@ static void rmt_recursive_sawtooth(const RMTGridMeta *m, double *x, const double
         return;
     }
 
-    const int spawnTasks=(omp_get_max_threads()>1 && level<c->rmtTaskDepth);
+    const int threadCount=omp_get_max_threads();
+    const int effectiveTaskDepth=(threadCount>=9) ? c->rmtTaskDepth : MIN(c->rmtTaskDepth,1);
+    const int spawnTasks=(threadCount>1 && level<effectiveTaskDepth);
 
     for(int sx=0;sx<3;++sx) for(int sy=0;sy<3;++sy) {
         const RMTGridMeta child=rmt_child_meta(m,sx,sy);
