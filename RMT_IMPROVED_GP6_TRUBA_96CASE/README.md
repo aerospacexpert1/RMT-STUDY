@@ -56,7 +56,8 @@ This submits:
 1. a debug-partition compile + 16-thread short smoke test;
 2. the 96-case production array only after the preflight succeeds;
 3. a second rescue array after the primary campaign. Completed cases are
-   skipped by `RUN_COMPLETE`.
+   skipped by `RUN_COMPLETE`;
+4. an automatic postprocess job that writes `campaign_summary.csv`.
 
 Monitor with:
 
