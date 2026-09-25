@@ -933,12 +933,14 @@ static void pressure_residual(const Grid *g, const Fields *f,
 
 static double array_max_abs_interior(const Grid *g, const double *a) {
     double value = 0.0;
-    #pragma omp parallel for collapse(2) reduction(max:value) schedule(static)
+    int bad = 0;
+    #pragma omp parallel for collapse(2) reduction(max:value) reduction(|:bad) schedule(static)
     for (int i=1; i<=g->Nx; ++i) for (int j=1; j<=g->Ny; ++j) {
         const double v = fabs(a[IDX(i,j,g->Ny)]);
-        if (isfinite(v) && v > value) value = v;
+        if (!isfinite(v)) bad = 1;
+        else if (v > value) value = v;
     }
-    return value;
+    return bad ? HUGE_VAL : value;
 }
 
 static void cycle_history_prepare(CycleHistory *h, int capacity) {
@@ -1489,12 +1491,14 @@ static MAYBE_UNUSED double residual_norm_pressure_variable(const Grid *g, const 
 
 static double max_abs_interior(const Grid *g, const double *a) {
     double m = 0.0;
-    #pragma omp parallel for collapse(2) reduction(max:m) schedule(static)
+    int bad = 0;
+    #pragma omp parallel for collapse(2) reduction(max:m) reduction(|:bad) schedule(static)
     for (int i=1; i<=g->Nx; ++i) for (int j=1; j<=g->Ny; ++j) {
-        double v = fabs(a[IDX(i,j,g->Ny)]);
-        if (isfinite(v) && v > m) m = v;
+        const double v = fabs(a[IDX(i,j,g->Ny)]);
+        if (!isfinite(v)) bad = 1;
+        else if (v > m) m = v;
     }
-    return m;
+    return bad ? HUGE_VAL : m;
 }
 
 static double residual_norm_scalar_variable(const Grid *g, const Fields *f, const double *phi, const double *rhs,
