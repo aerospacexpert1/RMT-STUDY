@@ -15,18 +15,21 @@ All 96 production cases use one globally fixed RMT configuration:
 factor-three shifted-grid hierarchy
 coarsest-to-finest sawtooth
 presmoothing = 0
-postsmoothing = 6
+postsmoothing = 16
 correction factor = 1
 coarsest solve = direct
 case-specific tuning = none
 ```
 
-The six post-sweeps are intentionally frozen for the entire campaign.  They are
-not selected by velocity, chemistry class, mesh, or thread count.  This follows
-the Martynenko sawtooth interpretation in which the RMT post-smoothing count is
-the analogue of the total smoothing work used around a conventional cycle.  It
-also gives a clean sensitivity comparison against the previous validated
-16-sweep production baseline.
+The 16 post-sweeps are intentionally frozen for the entire campaign and are not
+selected by velocity, chemistry class, mesh, or thread count.  A pre-production
+mesh-ladder screen tested 6, 8, 10, 12, 14, 16, 18, 20 and 24 global post-sweep
+counts.  Counts below 16 did not satisfy the existing robustness/mesh-ladder
+gate: 6--12 became unstable on sufficiently fine meshes and 14 converged but
+lost the required mesh-independent cycle behavior.  Sixteen is therefore kept
+as the minimum configuration that passes the previously defined validation
+gate.  The improved campaign changes implementation cost, not the validated
+numerical RMT cycle.
 
 ## Implementation improvements
 
@@ -65,9 +68,9 @@ released:
 - frozen-V95 fairness audit;
 - calibration/production separation audit;
 - boundary control-volume restriction test;
-- manufactured pressure mesh ladder at **6 post-sweeps**;
+- manufactured pressure mesh ladder at **16 post-sweeps**;
 - correction equivalence against the previous RMT implementation at the same
-  6-sweep count (roundoff tolerance);
+  16-sweep count (roundoff tolerance);
 - production solver compilation.
 
 The gated submit script then runs two representative cases before releasing the
