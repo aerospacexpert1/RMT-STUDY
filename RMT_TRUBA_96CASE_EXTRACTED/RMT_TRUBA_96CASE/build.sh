@@ -19,7 +19,7 @@ python3 tools/generate_finalvol2.py \
 echo "[2/7] Audit frozen V95 physics/timestep"
 python3 tools/audit_fairness.py \
   src/opposedflow_v95_frozen_sg_reference.c \
-  build/opposedflow_finalvol2.c
+  build/opposedflow_rmt_improved.c
 
 echo "[3/7] Audit calibration/production separation"
 python3 tools/audit_calibration_separation.py
