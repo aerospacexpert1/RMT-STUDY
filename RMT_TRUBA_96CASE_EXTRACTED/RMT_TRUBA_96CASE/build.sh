@@ -28,8 +28,8 @@ echo "[4/9] Compile optimized RMT self-test"
 gcc -O3 -march=native -std=c11 -Wall -Wextra -Wpedantic -fopenmp \
   tests/rmt_pressure_selftest.c -lm -o build/rmt_pressure_selftest
 
-echo "[5/9] Validate frozen RMT_IMPROVED setting (6 sweeps)"
-RMT_TEST_SWEEPS=6 ./build/rmt_pressure_selftest | tee build/rmt_pressure_selftest.log
+echo "[5/9] Validate frozen RMT_IMPROVED setting (16 sweeps)"
+RMT_TEST_SWEEPS=16 ./build/rmt_pressure_selftest | tee build/rmt_pressure_selftest.log
 grep -q "BOUNDARY_CV_RESTRICTION PASS" build/rmt_pressure_selftest.log
 grep -q "SELFTEST PASS" build/rmt_pressure_selftest.log
 
@@ -38,7 +38,7 @@ gcc -O3 -march=native -std=c11 -Wall -Wextra -Wpedantic -fopenmp \
   tests/optimization_equivalence.c -lm -o build/optimization_equivalence
 
 echo "[7/9] Prove implementation optimizations preserve the RMT correction"
-OMP_NUM_THREADS=4 OMP_DYNAMIC=false RMT_TEST_SWEEPS=6 ./build/optimization_equivalence | tee build/optimization_equivalence.log
+OMP_NUM_THREADS=4 OMP_DYNAMIC=false RMT_TEST_SWEEPS=16 ./build/optimization_equivalence | tee build/optimization_equivalence.log
 grep -q "OPTIMIZATION_EQUIVALENCE PASS" build/optimization_equivalence.log
 
 echo "[8/9] Compile independent calibration executable"
