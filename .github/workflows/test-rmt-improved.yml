@@ -1,0 +1,39 @@
+name: Test RMT improved
+
+on:
+  push:
+    branches:
+      - rmt-improved-development
+    paths:
+      - 'RMT_TRUBA_96CASE_EXTRACTED/RMT_TRUBA_96CASE/**'
+      - '.github/workflows/test-rmt-improved.yml'
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: rmt-improved-development
+
+      - name: Build and run numerical gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd RMT_TRUBA_96CASE_EXTRACTED/RMT_TRUBA_96CASE
+          chmod +x build.sh rebuild_manifest.sh run_case.sh smoke_local.sh tests/*.sh tools/*.py calibration/*.py
+          ./rebuild_manifest.sh
+          ./build.sh
+
+      - name: Verify 96-case manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd RMT_TRUBA_96CASE_EXTRACTED/RMT_TRUBA_96CASE
+          test "$(($(wc -l < campaign_manifest.csv)-1))" -eq 96
+          grep -q 'RMT_TEST_SWEEPS=6' build.sh
+          grep -q '^RMT_SMOOTH_SWEEPS=6$' run_case.sh
+          grep -q 'solver=RMT_IMPROVED' run_case.sh
+          echo "RMT_IMPROVED MANIFEST/GATE PASS"
