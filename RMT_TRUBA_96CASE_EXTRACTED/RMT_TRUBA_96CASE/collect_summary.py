@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Collect all 96 FINALVOL2 case summaries and RMT diagnostics."""
+"""Collect all 96 RMT_IMPROVED case summaries and RMT diagnostics."""
 
 from __future__ import annotations
 import argparse
@@ -9,7 +9,7 @@ import sys
 
 ROOT=Path(__file__).resolve().parent
 DEFAULT_MANIFEST=ROOT/"campaign_manifest.csv"
-DEFAULT_OUTPUT=ROOT/"RMT_FINALVOL2_campaign_summary.csv"
+DEFAULT_OUTPUT=ROOT/"RMT_IMPROVED_campaign_summary.csv"
 
 def read_key_value_file(path:Path)->dict[str,str]:
     data={}
@@ -25,7 +25,7 @@ def read_rmt_diag(path:Path)->dict[str,str]:
         return {}
     last=None
     for line in path.read_text(errors="replace").splitlines():
-        if line.startswith("RMT_FINALVOL2_DIAGNOSTICS "):
+        if line.startswith("RMT_IMPROVED_DIAGNOSTICS "):
             last=line
     if not last:
         return {}
