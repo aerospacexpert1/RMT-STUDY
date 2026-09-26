@@ -15,7 +15,7 @@ static void die(const char*m){fprintf(stderr,"FATAL: %s\n",m);exit(2);}
 #include "reference_rmt_final2d_impl.h"
 #include "../src/rmt_finalvol2_impl.h"
 
-static int one(int nx,int ny){
+static int one(int nx,int ny,int sweeps){
     Grid g={nx,ny,0.02,0.02,0,0,0,0};
     g.dx=g.Lx/g.Nx;g.dy=g.Ly/g.Ny;
     const size_t n=(size_t)(nx+2)*(size_t)(ny+2);
@@ -24,11 +24,11 @@ static int one(int nx,int ny){
     for(int i=1;i<=nx;++i)for(int j=1;j<=ny;++j)
         d[IDX(i,j,ny)]=sin(0.071*i)+cos(0.113*j)+0.05*sin(0.013*i*j);
 
-    RMTFinalConfig c0={0,16,5};
+    RMTFinalConfig c0={0,sweeps,5};
     RMTFinalDiag q0={0};
     rmt_final_build_correction(&g,d,a,&c0,&q0);
 
-    RMTV2Config c1={0,16,5};
+    RMTV2Config c1={0,sweeps,5};
     RMTV2Diag q1={0};
     rmt_v2_build_correction(&g,d,b,&c1,&q1);
 
@@ -45,12 +45,17 @@ static int one(int nx,int ny){
 }
 
 int main(void){
+    int sweeps=6;
+    const char*e=getenv("RMT_TEST_SWEEPS");
+    if(e&&*e)sweeps=atoi(e);
+    if(sweeps<1)sweeps=1;
 #ifdef _OPENMP
     omp_set_dynamic(0);
 #endif
+    printf("OPTIMIZATION_EQUIVALENCE sweeps=%d\n",sweeps);
     int ok=1;
-    ok&=one(108,36);
-    ok&=one(864,288);
+    ok&=one(108,36,sweeps);
+    ok&=one(864,288,sweeps);
     rmt_final_workspace_release();
     rmt_v2_workspace_release();
     if(!ok){fprintf(stderr,"OPTIMIZATION_EQUIVALENCE FAIL\n");return 5;}
