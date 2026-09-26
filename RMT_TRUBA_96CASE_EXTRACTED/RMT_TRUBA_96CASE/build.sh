@@ -4,7 +4,7 @@ ROOT=$(cd "$(dirname "$0")" && pwd)
 cd "$ROOT"
 
 echo "======================================================================"
-echo "FINALVOL2 build (optimized implementation, calibration not applied)"
+echo "RMT_IMPROVED build (six post-sweeps + hybrid geometric/algebraic OpenMP)"
 echo "======================================================================"
 echo "Compiler: $(gcc --version | head -n1)"
 
@@ -14,7 +14,7 @@ mkdir -p build
 echo "[1/7] Generate solver from frozen V95 reference"
 python3 tools/generate_finalvol2.py \
   src/opposedflow_v95_frozen_sg_reference.c \
-  build/opposedflow_finalvol2.c
+  build/opposedflow_rmt_improved.c
 
 echo "[2/7] Audit frozen V95 physics/timestep"
 python3 tools/audit_fairness.py \
@@ -28,8 +28,8 @@ echo "[4/9] Compile optimized RMT self-test"
 gcc -O3 -march=native -std=c11 -Wall -Wextra -Wpedantic -fopenmp \
   tests/rmt_pressure_selftest.c -lm -o build/rmt_pressure_selftest
 
-echo "[5/9] Validate robust baseline setting (16 sweeps)"
-RMT_TEST_SWEEPS=16 ./build/rmt_pressure_selftest | tee build/rmt_pressure_selftest.log
+echo "[5/9] Validate frozen RMT_IMPROVED setting (6 sweeps)"
+RMT_TEST_SWEEPS=6 ./build/rmt_pressure_selftest | tee build/rmt_pressure_selftest.log
 grep -q "BOUNDARY_CV_RESTRICTION PASS" build/rmt_pressure_selftest.log
 grep -q "SELFTEST PASS" build/rmt_pressure_selftest.log
 
@@ -38,16 +38,16 @@ gcc -O3 -march=native -std=c11 -Wall -Wextra -Wpedantic -fopenmp \
   tests/optimization_equivalence.c -lm -o build/optimization_equivalence
 
 echo "[7/9] Prove implementation optimizations preserve the RMT correction"
-OMP_NUM_THREADS=4 OMP_DYNAMIC=false ./build/optimization_equivalence | tee build/optimization_equivalence.log
+OMP_NUM_THREADS=4 OMP_DYNAMIC=false RMT_TEST_SWEEPS=6 ./build/optimization_equivalence | tee build/optimization_equivalence.log
 grep -q "OPTIMIZATION_EQUIVALENCE PASS" build/optimization_equivalence.log
 
 echo "[8/9] Compile independent calibration executable"
 gcc -O3 -march=native -std=c11 -Wall -Wextra -Wpedantic -fopenmp \
   calibration/rmt_smoothing_calibration.c -lm -o build/rmt_smoothing_calibration
 
-echo "[9/9] Compile frozen-V95 + FINALVOL2 reacting-flow solver"
+echo "[9/9] Compile frozen-V95 + RMT_IMPROVED reacting-flow solver"
 gcc -O3 -march=native -std=c11 -Wall -Wextra -Wpedantic -fopenmp -Isrc \
-  build/opposedflow_finalvol2.c -lm -o build/opposedflow_finalvol2
+  build/opposedflow_rmt_improved.c -lm -o build/opposedflow_rmt_improved
 
 sha256sum \
   src/opposedflow_v95_frozen_sg_reference.c \
@@ -59,7 +59,7 @@ sha256sum \
   tests/reference_rmt_final2d_impl.h \
   tests/optimization_equivalence.c \
   calibration/rmt_smoothing_calibration.c \
-  build/opposedflow_finalvol2.c build/opposedflow_finalvol2 \
+  build/opposedflow_rmt_improved.c build/opposedflow_rmt_improved \
   > build/SHA256SUMS.txt
 
-echo "FINALVOL2 BUILD PASS"
+echo "RMT_IMPROVED BUILD PASS"
