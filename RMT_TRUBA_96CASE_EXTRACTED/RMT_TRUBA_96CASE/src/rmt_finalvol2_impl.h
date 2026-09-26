@@ -17,14 +17,18 @@
  *   - correction stored on the fine index space and added in full;
  *   - no interpolation, no monotonic line-search and no hidden fallback.
  *
- * FINALVOL2 only removes implementation overhead:
+ * RMT_IMPROVED keeps the same mathematical correction but reduces the
+ * implementation cost of the previously validated FINALVOL2 baseline:
  *   1) one fine-defect prefix integral per RMT cycle (not per level);
- *   2) precomputed shifted-grid coefficients for every level;
- *   3) precomputed red/black point maps (no modulo/division in hot smoother);
- *   4) cached LU factors for the invariant coarsest shifted-grid matrices.
+ *   2) parallel two-pass prefix construction;
+ *   3) precomputed shifted-grid coefficients for every level;
+ *   4) point maps grouped by independent shifted-grid family;
+ *   5) hybrid geometric/algebraic OpenMP smoothing with persistent teams;
+ *   6) cached LU factors for the invariant coarsest shifted-grid matrices.
  *
- * The smoothing count remains a single global Martynenko-style NSIL analogue.
- * Production default is deliberately NOT retuned here; calibration is separate.
+ * The smoothing count remains one global Martynenko-style NSIL analogue.
+ * The production RMT_IMPROVED campaign freezes it at six post-sweeps for all
+ * meshes, physics classes and thread counts; there is no case-wise tuning.
  */
 
 #define RMTV2_MAX_LEVELS 16
@@ -52,6 +56,21 @@ typedef struct {
     double *yAp,*yM,*yP;
     RMTV2Point *red,*black;
     int nRed,nBlack;
+
+    /*
+     * Shifted-grid ownership map.
+     *
+     * A factor-three RMT level is a family of mutually disjoint shifted
+     * grids.  Keeping the red/black points grouped by grid lets the
+     * implementation choose between:
+     *   - algebraic parallelism: threads cooperate on one colour set; and
+     *   - geometric parallelism: independent shifted grids are assigned
+     *     to different threads with no cross-grid synchronization.
+     *
+     * This changes only scheduling, never the discrete RMT correction.
+     */
+    int ngx,ngy,ng;
+    int *redStart,*redCount,*blackStart,*blackCount;
 } RMTV2LevelPlan;
 
 typedef struct {
@@ -87,6 +106,8 @@ static long long g_rmtV2DirectSolvesTotal = 0;
 static long long g_rmtV2DirectUnknownsTotal = 0;
 static long long g_rmtV2LUFactorizationsTotal = 0;
 static long long g_rmtV2NonmonotoneCycles = 0;
+static long long g_rmtV2AlgebraicSmoothCalls = 0;
+static long long g_rmtV2GeometricSmoothCalls = 0;
 static double g_rmtV2LastCycleRatio = 0.0;
 static double g_rmtV2MaxCycleRatio = 0.0;
 static int g_rmtV2LastLevelX = 0;
@@ -96,6 +117,8 @@ static void rmt_v2_level_release(RMTV2LevelPlan *p){
     free(p->xAp); free(p->xM); free(p->xP);
     free(p->yAp); free(p->yM); free(p->yP);
     free(p->red); free(p->black);
+    free(p->redStart); free(p->redCount);
+    free(p->blackStart); free(p->blackCount);
     memset(p,0,sizeof(*p));
 }
 
@@ -161,13 +184,35 @@ static void rmt_v2_apply_fine_A(const Grid*g,const double*x,double*Ax){
 }
 
 static void rmt_v2_prefix_build(const Grid*g,const double*a,double*p){
-    const int ny=g->Ny,pitch=ny+1;
-    memset(p,0,(size_t)(g->Nx+1)*(size_t)(ny+1)*sizeof(double));
-    for(int i=1;i<=g->Nx;++i){
+    const int nx=g->Nx,ny=g->Ny,pitch=ny+1;
+    memset(p,0,(size_t)(nx+1)*(size_t)(ny+1)*sizeof(double));
+
+    /*
+     * Two-pass integral image.
+     * Pass 1 forms independent row prefixes and is embarrassingly parallel.
+     * Pass 2 accumulates columns.  Rectangle sums are mathematically
+     * identical to the former serial construction; only roundoff ordering
+     * can differ at machine precision.
+     */
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static) if(nx>32)
+#endif
+    for(int i=1;i<=nx;++i){
         double row=0.0;
         for(int j=1;j<=ny;++j){
             row+=a[IDX(i,j,ny)];
-            p[(size_t)i*pitch+j]=p[(size_t)(i-1)*pitch+j]+row;
+            p[(size_t)i*pitch+j]=row;
+        }
+    }
+
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static) if(ny>32)
+#endif
+    for(int j=1;j<=ny;++j){
+        double col=0.0;
+        for(int i=1;i<=nx;++i){
+            col+=p[(size_t)i*pitch+j];
+            p[(size_t)i*pitch+j]=col;
         }
     }
 }
@@ -245,18 +290,51 @@ static void rmt_v2_build_level_plan(const Grid*g,RMTV2LevelPlan*p,int sx,int sy,
     }
 
     if(!needMap)return;
+
+    /*
+     * Build maps grouped by shifted-grid id instead of by global fine-grid
+     * scan.  Shifted grids at a given level are disjoint, so this layout
+     * exposes Martynenko's geometric parallelism directly.
+     */
+    p->ngx=MIN(sx,g->Nx);
+    p->ngy=MIN(sy,g->Ny);
+    p->ng=p->ngx*p->ngy;
+
+    p->redStart=calloc((size_t)p->ng,sizeof(int));
+    p->redCount=calloc((size_t)p->ng,sizeof(int));
+    p->blackStart=calloc((size_t)p->ng,sizeof(int));
+    p->blackCount=calloc((size_t)p->ng,sizeof(int));
+    if(!p->redStart||!p->redCount||!p->blackStart||!p->blackCount)
+        die("alloc FINALVOL2 shifted-grid map metadata");
+
     const int nxy=g->Nx*g->Ny;
     p->red=malloc((size_t)nxy*sizeof(*p->red));
     p->black=malloc((size_t)nxy*sizeof(*p->black));
     if(!p->red||!p->black)die("alloc FINALVOL2 point maps");
+
     int nr=0,nb=0;
-    for(int i=1;i<=g->Nx;++i)for(int j=1;j<=g->Ny;++j){
-        const int ox=(i-1)%sx+1,oy=(j-1)%sy+1;
-        const int qi=(i-ox)/sx,qj=(j-oy)/sy;
-        RMTV2Point q={i,j};
-        if(((qi+qj)&1)==0)p->red[nr++]=q;else p->black[nb++]=q;
+    for(int gid=0;gid<p->ng;++gid){
+        const int ox=1+gid/p->ngy;
+        const int oy=1+gid%p->ngy;
+        p->redStart[gid]=nr;
+        p->blackStart[gid]=nb;
+
+        int a=0;
+        for(int i=ox;i<=g->Nx;i+=sx,++a){
+            int q=0;
+            for(int j=oy;j<=g->Ny;j+=sy,++q){
+                RMTV2Point pt={i,j};
+                if(((a+q)&1)==0)p->red[nr++]=pt;
+                else p->black[nb++]=pt;
+            }
+        }
+
+        p->redCount[gid]=nr-p->redStart[gid];
+        p->blackCount[gid]=nb-p->blackStart[gid];
     }
     p->nRed=nr;p->nBlack=nb;
+
+    if(nr+nb!=nxy)die("FINALVOL2 shifted-grid map does not cover fine index space");
 }
 
 static inline double rmt_v2_update_planned(const Grid*g,double*c,const double*rhs,
@@ -274,25 +352,75 @@ static inline double rmt_v2_update_planned(const Grid*g,double*c,const double*rh
 
 static long long rmt_v2_smooth_level(const Grid*g,double*c,const double*rhs,
                                      const RMTV2LevelPlan*p,int sweeps){
-    long long updates=0;
-    for(int sw=0;sw<sweeps;++sw){
+    if(sweeps<=0)return 0;
+    const long long updates=(long long)(p->nRed+p->nBlack)*(long long)sweeps;
+
 #ifdef _OPENMP
-#pragma omp parallel for schedule(static) reduction(+:updates) if(p->nRed>2048)
-#endif
-        for(int k=0;k<p->nRed;++k){
-            const int i=p->red[k].i,j=p->red[k].j;
-            c[IDX(i,j,g->Ny)]=rmt_v2_update_planned(g,c,rhs,p,i,j);
-            ++updates;
+    const int nt=MAX(1,omp_get_max_threads());
+
+    /*
+     * Hybrid Martynenko-style scheduling.
+     *
+     * Deep RMT levels contain many independent shifted grids.  When there
+     * are enough grids to occupy the team, assign whole grids to threads:
+     * each thread performs red/black sweeps locally and no global colour
+     * barrier is needed between unrelated grids (geometric parallelism).
+     *
+     * On fine levels the number of shifted grids is too small, therefore
+     * all threads cooperate on the red and black point sets inside one
+     * persistent OpenMP region (algebraic parallelism).  This avoids the
+     * two parallel-region launches that the previous code paid per sweep.
+     */
+    const int useGeometric=(p->ng>1 && p->ng>=nt);
+
+    if(useGeometric){
+        ++g_rmtV2GeometricSmoothCalls;
+#pragma omp parallel for schedule(static)
+        for(int gid=0;gid<p->ng;++gid){
+            const int rs=p->redStart[gid],rn=p->redCount[gid];
+            const int bs=p->blackStart[gid],bn=p->blackCount[gid];
+            for(int sw=0;sw<sweeps;++sw){
+                for(int kk=0;kk<rn;++kk){
+                    const RMTV2Point q=p->red[rs+kk];
+                    c[IDX(q.i,q.j,g->Ny)]=rmt_v2_update_planned(g,c,rhs,p,q.i,q.j);
+                }
+                for(int kk=0;kk<bn;++kk){
+                    const RMTV2Point q=p->black[bs+kk];
+                    c[IDX(q.i,q.j,g->Ny)]=rmt_v2_update_planned(g,c,rhs,p,q.i,q.j);
+                }
+            }
         }
-#ifdef _OPENMP
-#pragma omp parallel for schedule(static) reduction(+:updates) if(p->nBlack>2048)
-#endif
-        for(int k=0;k<p->nBlack;++k){
-            const int i=p->black[k].i,j=p->black[k].j;
-            c[IDX(i,j,g->Ny)]=rmt_v2_update_planned(g,c,rhs,p,i,j);
-            ++updates;
+    }else{
+        ++g_rmtV2AlgebraicSmoothCalls;
+#pragma omp parallel
+        {
+            for(int sw=0;sw<sweeps;++sw){
+#pragma omp for schedule(static)
+                for(int k=0;k<p->nRed;++k){
+                    const RMTV2Point q=p->red[k];
+                    c[IDX(q.i,q.j,g->Ny)]=rmt_v2_update_planned(g,c,rhs,p,q.i,q.j);
+                }
+#pragma omp for schedule(static)
+                for(int k=0;k<p->nBlack;++k){
+                    const RMTV2Point q=p->black[k];
+                    c[IDX(q.i,q.j,g->Ny)]=rmt_v2_update_planned(g,c,rhs,p,q.i,q.j);
+                }
+            }
         }
     }
+#else
+    ++g_rmtV2AlgebraicSmoothCalls;
+    for(int sw=0;sw<sweeps;++sw){
+        for(int k=0;k<p->nRed;++k){
+            const RMTV2Point q=p->red[k];
+            c[IDX(q.i,q.j,g->Ny)]=rmt_v2_update_planned(g,c,rhs,p,q.i,q.j);
+        }
+        for(int k=0;k<p->nBlack;++k){
+            const RMTV2Point q=p->black[k];
+            c[IDX(q.i,q.j,g->Ny)]=rmt_v2_update_planned(g,c,rhs,p,q.i,q.j);
+        }
+    }
+#endif
     return updates;
 }
 
