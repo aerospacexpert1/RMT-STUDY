@@ -44,7 +44,7 @@ P_ABS_TOL=${P_ABS_TOL:-1e-6}
 # inherited from the submission environment, so all 96 cases use one
 # identical solver configuration.
 RMT_LEVELS=0
-RMT_SMOOTH_SWEEPS=6
+RMT_SMOOTH_SWEEPS=16
 RMT_OMEGA=1.0
 
 cat > "$run_dir/parameters.txt" <<PARAMS
