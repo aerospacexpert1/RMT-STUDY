@@ -1,100 +1,90 @@
-# FINALVOL2
+# RMT_IMPROVED — 96-case reacting-flow campaign
 
-FINALVOL2 is the calibration/optimization revision derived from **RMT FINAL**.
+This branch is a controlled optimization of the validated FINALVOL2 RMT pressure
+solver.  The reacting-flow physics, V95 timestep loop, pressure equation,
+pressure tolerances, scalar treatment, meshes, chemistry classes and thread
+counts are intentionally unchanged.
 
-The numerical RMT method is intentionally unchanged.  FINALVOL2 keeps the same
-Martynenko-style factor-three hierarchy, coarsest-to-finest sawtooth,
-no-presmoothing structure, control-volume residual restriction, direct
-coarsest solves, full correction update, no interpolation, and no hidden
-fallback.  The frozen V95 reacting-flow physics, timestep loop, pressure
-equation, tolerances, meshes, chemistry, scalar iterations and thread counts are
-not changed.
+The production solver label is **RMT_IMPROVED**.
 
-## What is optimized
+## Frozen numerical configuration
 
-Only implementation overhead that does not change the mathematical RMT cycle:
-
-1. The fine-defect prefix integral is formed **once per RMT cycle**, then reused
-   by every coarse level.
-2. Shifted-grid finite-volume coefficients are precomputed once for each level.
-3. Red/black shifted-grid point maps are precomputed, removing modulo/division
-   work from the smoother hot loop.
-4. Coarsest shifted-grid matrices are invariant for a fixed mesh/operator, so
-   their LU factorizations are cached and reused.  The RHS is still solved
-   exactly on every RMT cycle.
-5. A regression test compares the correction from FINALVOL2 with the previous
-   RMT FINAL implementation on M1 and M4 and fails if they differ beyond roundoff.
-
-These changes reduce cost per RMT cycle; they do not alter the RMT equations or
-the convergence target.
-
-## Important: smoothing is NOT retuned yet
-
-Production scripts remain at the already validated robust baseline:
+All 96 production cases use one globally fixed RMT configuration:
 
 ```text
-RMT_SMOOTH_SWEEPS=16
+factor-three shifted-grid hierarchy
+coarsest-to-finest sawtooth
+presmoothing = 0
+postsmoothing = 6
+correction factor = 1
+coarsest solve = direct
+case-specific tuning = none
 ```
 
-FINALVOL2 contains a separate calibration package.  The calibration script does
-not edit production code and does not use the 96 reacting-flow benchmark
-results to choose the parameter.
+The six post-sweeps are intentionally frozen for the entire campaign.  They are
+not selected by velocity, chemistry class, mesh, or thread count.  This follows
+the Martynenko sawtooth interpretation in which the RMT post-smoothing count is
+the analogue of the total smoothing work used around a conventional cycle.  It
+also gives a clean sensitivity comparison against the previous validated
+16-sweep production baseline.
 
-Run on TRUBA:
+## Implementation improvements
 
-```bash
-cd FINALVOL2
-chmod +x build.sh calibration/*.py calibration/*.slurm tests/*.sh tools/*.py
-./build.sh
-sbatch calibration/calibrate.slurm
-```
+The mathematical RMT correction remains factor-three, multiple-coarse-grid and
+full-correction.  The implementation now removes avoidable execution overhead:
 
-or interactively:
+1. The fine-grid defect integral is formed once per RMT cycle.
+2. The integral image is built with a two-pass OpenMP implementation.
+3. Shifted-grid finite-volume coefficients are precomputed.
+4. Red/black point maps are grouped by independent shifted-grid family.
+5. Smoothing uses a hybrid parallel strategy:
+   - **algebraic parallelism** on fine levels, where the OpenMP team cooperates
+     on red and black point sets inside one persistent parallel region;
+   - **geometric parallelism** on deeper levels, where complete independent
+     shifted grids are assigned to threads, eliminating global red/black
+     barriers between unrelated grids.
+6. Invariant coarsest matrices retain cached LU factorizations and every current
+   RHS is solved directly.
 
-```bash
-python3 calibration/run_smoothing_calibration.py \
-  --threads 16 --candidates 8,10,12,14,16
-```
+No interpolation, line search, hidden SG fallback, mesh-specific smoother
+selection, or physics-specific RMT branch is introduced.
 
-Outputs:
+## Scientific comparison rule
 
-```text
-calibration/calibration_results.csv
-calibration/calibration_summary.csv
-calibration/CALIBRATION_RECOMMENDATION.txt
-```
-
-The default calibration uses three deterministic manufactured pressure fields
-(LOW, MIXED and COMBINED) on all four campaign mesh sizes.  A candidate must
-satisfy the same mixed pressure-correction boundary conditions and pressure
-residual target on all 12 calibration problems.  Among robust candidates the
-recommendation minimizes total RMT point-update work.  Wall time is recorded
-but is not used to choose the numerical parameter.
-
-After the calibration result is reviewed, create a separate frozen production
-revision with one globally fixed smoothing count.  Do **not** case-tune by
-velocity, chemistry class, mesh or thread count.
+Do not merge these results into the previous RMT_FINALVOL2 summary under the
+same solver name.  Treat **RMT_IMPROVED** as an additional solver configuration.
+The purpose is to measure whether reducing excessive post-smoothing work and
+exposing both geometric and algebraic parallelism improves time-to-solution
+without changing the frozen reacting-flow problem.
 
 ## Validation gates
 
-`./build.sh` performs:
+`./build.sh` must pass all of the following before the 96-case array is
+released:
 
 - frozen-V95 fairness audit;
 - calibration/production separation audit;
 - boundary control-volume restriction test;
-- 108x36, 216x72, 432x144, 864x288 pressure mesh ladder at the existing
-  16-sweep baseline;
-- optimization-equivalence test against RMT FINAL on M1 and M4;
-- compilation of the independent calibration executable;
+- manufactured pressure mesh ladder at **6 post-sweeps**;
+- correction equivalence against the previous RMT implementation at the same
+  6-sweep count (roundoff tolerance);
 - production solver compilation.
 
-Additional tests:
+The gated submit script then runs two representative cases before releasing the
+full array.
+
+## TRUBA
 
 ```bash
-OMP_NUM_THREADS=4 RMT_SWEEPS=16 ./tests/first_pressure_matrix.sh
-OMP_NUM_THREADS=4 RMT_SWEEPS=16 ./smoke_local.sh
+chmod +x build.sh rebuild_manifest.sh run_case.sh submit_gated_96.sh
+./rebuild_manifest.sh
+./submit_gated_96.sh
 ```
 
-No new 96-case campaign should be submitted from FINALVOL2 until the calibration
-result has been reviewed and the smoothing parameter is frozen in the next
-production revision.
+The full campaign is 96 cases:
+
+- 6 physical labels;
+- M1–M4 meshes;
+- 1, 2, 4 and 16 OpenMP threads.
+
+The Slurm array is `0-95%3` with a three-day wall-time limit per array task.
