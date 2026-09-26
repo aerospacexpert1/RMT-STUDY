@@ -40,9 +40,12 @@ P_REL_TOL=${P_REL_TOL:-1e-4}
 P_ABS_TOL=${P_ABS_TOL:-1e-6}
 
 # RMT_IMPROVED has one RMT tuning knob: postsmoothing sweep count.
-RMT_LEVELS=${RMT_LEVELS:-0}
-RMT_SMOOTH_SWEEPS=${RMT_SMOOTH_SWEEPS:-6}
-RMT_OMEGA=${RMT_OMEGA:-1.0}
+# Frozen RMT_IMPROVED production controls.  These are deliberately not
+# inherited from the submission environment, so all 96 cases use one
+# identical solver configuration.
+RMT_LEVELS=0
+RMT_SMOOTH_SWEEPS=6
+RMT_OMEGA=1.0
 
 cat > "$run_dir/parameters.txt" <<PARAMS
 array_index=$array_index
