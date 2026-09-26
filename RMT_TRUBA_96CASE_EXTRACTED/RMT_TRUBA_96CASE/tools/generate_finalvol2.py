@@ -32,7 +32,7 @@ old_defaults = """c->mgPreSmooth = 3;
     c->mgCoarseSweeps = 40;
     c->mgOmega = 1.0;"""
 new_defaults = """c->mgPreSmooth = 0;
-    c->mgPostSmooth = 6;
+    c->mgPostSmooth = 16;
     c->mgCoarseSweeps = 0;
     c->mgOmega = 1.0;"""
 if old_defaults not in s:
