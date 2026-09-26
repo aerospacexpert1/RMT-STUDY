@@ -1,0 +1,45 @@
+name: Extract RMT 96CASE source
+
+on:
+  push:
+    branches:
+      - rmt-improved-development
+    paths:
+      - '.github/workflows/extract-rmt96.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: rmt-improved-development
+          fetch-depth: 0
+
+      - name: Extract RAR package
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf RMT_TRUBA_96CASE_EXTRACTED
+          mkdir -p RMT_TRUBA_96CASE_EXTRACTED
+          7z x -y RMT_TRUBA_96CASE.rar -oRMT_TRUBA_96CASE_EXTRACTED
+          find RMT_TRUBA_96CASE_EXTRACTED -maxdepth 3 -type f | sort
+
+      - name: Commit extracted source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add RMT_TRUBA_96CASE_EXTRACTED
+          if git diff --cached --quiet; then
+            echo "Nothing new to commit"
+          else
+            git commit -m "Extract RMT 96-case source for improved solver development"
+            git push origin HEAD:rmt-improved-development
+          fi
