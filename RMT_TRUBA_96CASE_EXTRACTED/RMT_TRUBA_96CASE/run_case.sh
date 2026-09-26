@@ -3,7 +3,7 @@ set -euo pipefail
 ROOT=${ROOT:-$PWD}
 INDEX=${1:?usage: run_case.sh ARRAY_INDEX}
 MANIFEST="$ROOT/campaign_manifest.csv"
-EXE="$ROOT/build/opposedflow_finalvol2"
+EXE="$ROOT/build/opposedflow_rmt_improved"
 [[ -x "$EXE" ]] || { echo "ERROR: executable not found: $EXE" >&2; exit 2; }
 [[ -f "$MANIFEST" ]] || { echo "ERROR: manifest not found: $MANIFEST" >&2; exit 2; }
 
@@ -39,9 +39,9 @@ P_CYCLES=${P_CYCLES:-500}
 P_REL_TOL=${P_REL_TOL:-1e-4}
 P_ABS_TOL=${P_ABS_TOL:-1e-6}
 
-# FINALVOL2 has one RMT tuning knob: postsmoothing sweep count.
+# RMT_IMPROVED has one RMT tuning knob: postsmoothing sweep count.
 RMT_LEVELS=${RMT_LEVELS:-0}
-RMT_SMOOTH_SWEEPS=${RMT_SMOOTH_SWEEPS:-16}
+RMT_SMOOTH_SWEEPS=${RMT_SMOOTH_SWEEPS:-6}
 RMT_OMEGA=${RMT_OMEGA:-1.0}
 
 cat > "$run_dir/parameters.txt" <<PARAMS
@@ -61,7 +61,7 @@ beta=$beta
 Ta_K=$Ta
 threads=$threads
 core_label=$core_label
-solver=RMT_FINALVOL2
+solver=RMT_IMPROVED
 rmt_levels=$RMT_LEVELS
 rmt_smoothing_sweeps=$RMT_SMOOTH_SWEEPS
 rmt_coarsest_solver=dense_direct
@@ -135,7 +135,7 @@ valid=1
 [[ -s "$out_dir/performance/pressure_step_history.csv" ]] || valid=0
 [[ -s "$out_dir/performance/final_pressure_cycle_history.csv" ]] || valid=0
 grep -q '^Done\.' "$run_dir/run.log" || valid=0
-grep -q 'RMT_FINALVOL2_DIAGNOSTICS' "$run_dir/run.log" || valid=0
+grep -q 'RMT_IMPROVED_DIAGNOSTICS' "$run_dir/run.log" || valid=0
 if grep -q 'RMT_PRESSURE_NOT_CONVERGED' "$run_dir/run.log"; then valid=0; fi
 
 if [[ -s "$out_dir/summary.csv" ]]; then
@@ -145,7 +145,7 @@ path,end,rtol,atol=sys.argv[1],float(sys.argv[2]),float(sys.argv[3]),float(sys.a
 with open(path,newline='') as f:
     row=next(csv.DictReader(f))
 def x(k): return float(row[k])
-assert row['solver']=='RMT_FINALVOL2', row['solver']
+assert row['solver']=='RMT_IMPROVED', row['solver']
 assert abs(x('final_time_s')-end) <= 1e-11*max(1.0,abs(end))
 assert math.isfinite(x('mass_residual_max'))
 assert math.isfinite(x('Tmax_K'))
