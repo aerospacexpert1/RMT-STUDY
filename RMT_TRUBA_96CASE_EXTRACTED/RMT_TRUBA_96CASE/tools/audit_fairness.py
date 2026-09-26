@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-fast audit proving FINALVOL2 changes only the V95 pressure solver/reporting."""
+"""Fail-fast audit proving RMT_IMPROVED changes only the V95 pressure solver/reporting."""
 from pathlib import Path
 import hashlib
 import sys
@@ -60,7 +60,7 @@ print(f"FAIRNESS MATCH timestep_loop sha256={sha(x)}")
 for token in [
     '#include "rmt_finalvol2_impl.h"',
     "rmt_v2_build_correction",
-    "RMT_FINALVOL2_DIAGNOSTICS",
+    "RMT_IMPROVED_DIAGNOSTICS",
     "RMT_PRESSURE_NOT_CONVERGED",
     "Non-incremental projection: pressure is intentionally excluded here",
     "correct_velocity_and_face_flux(&g,&ph,&f,dt);",
@@ -68,7 +68,7 @@ for token in [
     if token not in b:
         raise SystemExit(f"FAIRNESS FAIL: generated invariant missing: {token}")
 
-# These V4 mechanisms are deliberately forbidden in FINALVOL2.
+# These V4 mechanisms are deliberately forbidden in RMT_IMPROVED.
 for forbidden in [
     "RMT_PRESSURE_REJECT",
     "omegaTry",
@@ -82,4 +82,4 @@ mp=block(b,"static void momentum_predictor(")
 if "dpdx" in mp or "dpdy" in mp or "gradp" in mp:
     raise SystemExit("FAIRNESS FAIL: pressure gradient found inside frozen V95 momentum predictor")
 
-print("FAIRNESS_AUDIT PASS: frozen V95 physics/timestep are byte-identical; FINALVOL2 changes only pressure-solver implementation/reporting.")
+print("FAIRNESS_AUDIT PASS: frozen V95 physics/timestep are byte-identical; RMT_IMPROVED changes only pressure-solver implementation/reporting.")
