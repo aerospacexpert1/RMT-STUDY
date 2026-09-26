@@ -10,7 +10,7 @@ import re
 import sys
 
 if len(sys.argv) != 3:
-    raise SystemExit("usage: generate_rmt_improved.py FROZEN_V95.c OUTPUT.c")
+    raise SystemExit("usage: generate_finalvol2.py FROZEN_V95.c OUTPUT.c")
 base = Path(sys.argv[1])
 out = Path(sys.argv[2])
 s = base.read_text()
@@ -32,7 +32,7 @@ old_defaults = """c->mgPreSmooth = 3;
     c->mgCoarseSweeps = 40;
     c->mgOmega = 1.0;"""
 new_defaults = """c->mgPreSmooth = 0;
-    c->mgPostSmooth = 16;
+    c->mgPostSmooth = 6;
     c->mgCoarseSweeps = 0;
     c->mgOmega = 1.0;"""
 if old_defaults not in s:
@@ -63,7 +63,7 @@ for old,new in aliases:
     s=s.replace(old,new,1)
 
 marker = "static PressureStats solve_pressure_poisson("
-s = s.replace(marker, '#include "rmt_rmt_improved_impl.h"\n\n' + marker, 1)
+s = s.replace(marker, '#include "rmt_finalvol2_impl.h"\n\n' + marker, 1)
 
 new_pressure = r'''static PressureStats solve_pressure_poisson(const Grid *g, const Phys *ph, Fields *f,
                                              const Controls *c,
@@ -166,7 +166,7 @@ if not m:
 s = s[:m.start()] + new_pressure + "\nstatic void correct_velocity_and_face_flux" + s[m.end():]
 
 # Reporting-only changes outside the byte-audited physical timestep loop.
-s = s.replace("SG_RBGS", "RMT_RMT_IMPROVED")
+s = s.replace("SG_RBGS", "RMT_IMPROVED")
 s = s.replace("SG-RBGS", "RMT_IMPROVED")
 s = s.replace("single-grid RBGS pressure solve",
               "Martynenko-style multiple-coarse-grid RMT pressure solve")
@@ -211,7 +211,7 @@ s = s.replace(
 
 anchor = '    printf("Final mass residual:'
 diag = (
-    '    printf("RMT_RMT_IMPROVED_DIAGNOSTICS levelsX=%d levelsY=%d direct_solves=%lld direct_unknowns=%lld '
+    '    printf("RMT_IMPROVED_DIAGNOSTICS levelsX=%d levelsY=%d direct_solves=%lld direct_unknowns=%lld '
     'lu_factorizations=%lld nonmonotone_cycles=%lld last_cycle_ratio=%.17g max_cycle_ratio=%.17g point_updates=%lld\\n",\n'
     '           g_rmtV2LastLevelX, g_rmtV2LastLevelY,\n'
     '           g_rmtV2DirectSolvesTotal, g_rmtV2DirectUnknownsTotal, g_rmtV2LUFactorizationsTotal,\n'
@@ -222,7 +222,7 @@ if anchor not in s:
     raise SystemExit("generation refused: final diagnostics anchor missing")
 s = s.replace(anchor, diag + anchor, 1)
 
-banner = "// RMT_RMT_IMPROVED_GENERATED: frozen V95 physics/timestep; pressure linear solver only replaced by improved Martynenko-aligned RMT.\n"
+banner = "// RMT_IMPROVED_GENERATED: frozen V95 physics/timestep; pressure linear solver only replaced by improved Martynenko-aligned RMT.\n"
 out.parent.mkdir(parents=True, exist_ok=True)
 out.write_text(banner + s)
 print(f"Generated {out} from frozen V95 SG reference ({len(s)} bytes)")
