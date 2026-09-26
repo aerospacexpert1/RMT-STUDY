@@ -10,7 +10,7 @@ cal=(root/"calibration"/"run_smoothing_calibration.py").read_text()
 must_run=[
     "P_REL_TOL=${P_REL_TOL:-1e-4}",
     "P_ABS_TOL=${P_ABS_TOL:-1e-6}",
-    "RMT_SMOOTH_SWEEPS=6",
+    "RMT_SMOOTH_SWEEPS=16",
     "-perfectGas 0 -variableCp 0 -sutherland 0 -rhoRelax 1",
     "-sCycles 4 -sSweeps 5",
 ]
@@ -31,4 +31,4 @@ for forbidden in ["write_text(run_case", "open('../run_case.sh','w'", "sed -i", 
 
 if gen.count("cfg.smoothSweeps =") != 1:
     raise SystemExit("CALIBRATION_SEPARATION FAIL expected one global smoothSweeps assignment")
-print("CALIBRATION_SEPARATION PASS: calibration is advisory; production parameter remains global and frozen at 6.")
+print("CALIBRATION_SEPARATION PASS: calibration is advisory; production parameter remains global and frozen at 16.")
