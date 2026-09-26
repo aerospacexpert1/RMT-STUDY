@@ -1,0 +1,42 @@
+name: Screen RMT improved sweeps
+
+on:
+  push:
+    branches:
+      - rmt-improved-development
+    paths:
+      - '.github/workflows/screen-rmt-sweeps.yml'
+  workflow_dispatch:
+
+jobs:
+  screen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: rmt-improved-development
+      - name: Compile self-test
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd RMT_TRUBA_96CASE_EXTRACTED/RMT_TRUBA_96CASE
+          mkdir -p build
+          gcc -O3 -march=native -std=c11 -Wall -Wextra -Wpedantic -fopenmp             tests/rmt_pressure_selftest.c -lm -o build/rmt_pressure_selftest
+      - name: Screen global post-sweep counts
+        shell: bash
+        run: |
+          cd RMT_TRUBA_96CASE_EXTRACTED/RMT_TRUBA_96CASE
+          rm -f build/sweep_screen.txt
+          for s in 6 8 10 12 14 16 18 20 24; do
+            echo "===== SWEEPS=$s =====" | tee -a build/sweep_screen.txt
+            set +e
+            OMP_NUM_THREADS=4 OMP_DYNAMIC=false RMT_TEST_SWEEPS=$s               ./build/rmt_pressure_selftest 2>&1 | tee -a build/sweep_screen.txt
+            rc=${PIPESTATUS[0]}
+            set -e
+            echo "RETURN_CODE=$rc" | tee -a build/sweep_screen.txt
+          done
+          echo "===== PASSING CANDIDATES ====="
+          awk '
+            /^===== SWEEPS=/ {s=$0}
+            /SELFTEST PASS/ {print s}
+          ' build/sweep_screen.txt
