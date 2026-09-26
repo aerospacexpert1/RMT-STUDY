@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=RMTV2_BUILD
+#SBATCH --job-name=RMTIMP_BUILD
 #SBATCH --partition=orfoz
 #SBATCH --exclude=orfoz359
 #SBATCH --nodes=1
@@ -7,8 +7,8 @@
 #SBATCH --cpus-per-task=1
 #SBATCH --exclusive
 #SBATCH --time=00:30:00
-#SBATCH --output=slurm-RMTV2_BUILD_%j.out
-#SBATCH --error=slurm-RMTV2_BUILD_%j.err
+#SBATCH --output=slurm-RMTIMP_BUILD_%j.out
+#SBATCH --error=slurm-RMTIMP_BUILD_%j.err
 set -euo pipefail
 module purge
 module load comp/gcc/12.3.0
