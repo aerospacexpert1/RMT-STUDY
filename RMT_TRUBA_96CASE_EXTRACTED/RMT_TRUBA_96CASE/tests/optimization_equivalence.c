@@ -45,7 +45,7 @@ static int one(int nx,int ny,int sweeps){
 }
 
 int main(void){
-    int sweeps=6;
+    int sweeps=16;
     const char*e=getenv("RMT_TEST_SWEEPS");
     if(e&&*e)sweeps=atoi(e);
     if(sweeps<1)sweeps=1;
