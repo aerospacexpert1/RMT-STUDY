@@ -33,7 +33,7 @@ jobs:
           set -euo pipefail
           cd RMT_TRUBA_96CASE_EXTRACTED/RMT_TRUBA_96CASE
           test "$(($(wc -l < campaign_manifest.csv)-1))" -eq 96
-          grep -q 'RMT_TEST_SWEEPS=6' build.sh
-          grep -q '^RMT_SMOOTH_SWEEPS=6$' run_case.sh
+          grep -q 'RMT_TEST_SWEEPS=16' build.sh
+          grep -q '^RMT_SMOOTH_SWEEPS=16$' run_case.sh
           grep -q 'solver=RMT_IMPROVED' run_case.sh
           echo "RMT_IMPROVED MANIFEST/GATE PASS"
