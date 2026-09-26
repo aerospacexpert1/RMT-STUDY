@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=RMTV2_96
+#SBATCH --job-name=RMTIMP_96
 #SBATCH --partition=orfoz
 #SBATCH --exclude=orfoz359
 #SBATCH --nodes=1
@@ -8,15 +8,15 @@
 #SBATCH --exclusive
 #SBATCH --time=3-00:00:00
 #SBATCH --array=0-95%3
-#SBATCH --output=slurm-RMTV2_96_%A_%a.out
+#SBATCH --output=slurm-RMTIMP_96_%A_%a.out
 #SBATCH --error=slurm-RMTV2_96_%A_%a.err
 set -euo pipefail
 module purge
 module load comp/gcc/12.3.0
 cd "$SLURM_SUBMIT_DIR"
-[[ -x build/opposedflow_finalvol2 ]] || { echo "ERROR: build/opposedflow_finalvol2 is missing" >&2; exit 10; }
+[[ -x build/opposedflow_rmt_improved ]] || { echo "ERROR: build/opposedflow_finalvol2 is missing" >&2; exit 10; }
 [[ -f campaign_manifest.csv ]] || { echo "ERROR: campaign_manifest.csv is missing; run ./rebuild_manifest.sh" >&2; exit 11; }
 [[ -x run_case.sh ]] || { echo "ERROR: run_case.sh not executable" >&2; exit 12; }
 export ROOT="$SLURM_SUBMIT_DIR"
-echo "FINALVOL2 job=${SLURM_ARRAY_JOB_ID:-$SLURM_JOB_ID} task=$SLURM_ARRAY_TASK_ID node=$(hostname)"
+echo "RMT_IMPROVED job=${SLURM_ARRAY_JOB_ID:-$SLURM_JOB_ID} task=$SLURM_ARRAY_TASK_ID node=$(hostname)"
 ./run_case.sh "$SLURM_ARRAY_TASK_ID"
