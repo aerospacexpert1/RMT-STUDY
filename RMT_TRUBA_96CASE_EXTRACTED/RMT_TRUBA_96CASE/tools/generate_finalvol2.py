@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate FINALVOL2 from the frozen V95 SG-RBGS production source.
+"""Generate RMT_IMPROVED from the frozen V95 SG-RBGS production source.
 
 Only the pressure linear solver, its controls, and reporting are replaced.  The
 physical timestep loop and all reacting-flow kernels remain byte-identical to
@@ -10,7 +10,7 @@ import re
 import sys
 
 if len(sys.argv) != 3:
-    raise SystemExit("usage: generate_finalvol2.py FROZEN_V95.c OUTPUT.c")
+    raise SystemExit("usage: generate_rmt_improved.py FROZEN_V95.c OUTPUT.c")
 base = Path(sys.argv[1])
 out = Path(sys.argv[2])
 s = base.read_text()
@@ -63,7 +63,7 @@ for old,new in aliases:
     s=s.replace(old,new,1)
 
 marker = "static PressureStats solve_pressure_poisson("
-s = s.replace(marker, '#include "rmt_finalvol2_impl.h"\n\n' + marker, 1)
+s = s.replace(marker, '#include "rmt_rmt_improved_impl.h"\n\n' + marker, 1)
 
 new_pressure = r'''static PressureStats solve_pressure_poisson(const Grid *g, const Phys *ph, Fields *f,
                                              const Controls *c,
@@ -91,7 +91,7 @@ new_pressure = r'''static PressureStats solve_pressure_poisson(const Grid *g, co
         return stats;
 
     if (fabs(c->mgOmega-1.0) > 1.0e-14)
-        die("FINALVOL2 requires the full Martynenko correction (rmtOmega=1)");
+        die("RMT_IMPROVED requires the full Martynenko correction (rmtOmega=1)");
 
     RMTV2Config cfg;
     cfg.requestedLevels = MAX(0, c->mgPreSmooth);
@@ -124,7 +124,7 @@ new_pressure = r'''static PressureStats solve_pressure_poisson(const Grid *g, co
         apply_bc_velocity_pressure(g, ph, f);
         const double newRes = residual_norm_pressure_variable(g, f, f->rhs);
         if (!isfinite(newRes))
-            die("FINALVOL2 produced a non-finite pressure residual");
+            die("RMT_IMPROVED produced a non-finite pressure residual");
 
         const double ratio = newRes/MAX(oldRes,1.0e-300);
         g_rmtV2LastCycleRatio = ratio;
@@ -147,7 +147,7 @@ new_pressure = r'''static PressureStats solve_pressure_poisson(const Grid *g, co
                 "RMT_PRESSURE_NOT_CONVERGED cycles=%d absResidual=%.17g relResidual=%.17g absTol=%.17g relTol=%.17g\n",
                 stats.cycles, stats.absResidual, stats.relResidual,
                 c->pressureAbsTol, c->pressureRelTol);
-        die("FINALVOL2 pressure solve hit max cycles without meeting the frozen V95 tolerance");
+        die("RMT_IMPROVED pressure solve hit max cycles without meeting the frozen V95 tolerance");
     }
 
     if (stats.cycles > 0 && stats.initialResidual > 0.0 && stats.absResidual > 0.0)
@@ -166,15 +166,15 @@ if not m:
 s = s[:m.start()] + new_pressure + "\nstatic void correct_velocity_and_face_flux" + s[m.end():]
 
 # Reporting-only changes outside the byte-audited physical timestep loop.
-s = s.replace("SG_RBGS", "RMT_FINALVOL2")
-s = s.replace("SG-RBGS", "FINALVOL2")
+s = s.replace("SG_RBGS", "RMT_RMT_IMPROVED")
+s = s.replace("SG-RBGS", "RMT_IMPROVED")
 s = s.replace("single-grid RBGS pressure solve",
               "Martynenko-style multiple-coarse-grid RMT pressure solve")
 s = s.replace("Pressure grid: finest grid only, %dx%d (no coarse grids)",
               "RMT pressure grid: finest %dx%d; automatic independent factor-3 hierarchy")
 s = s.replace(
-    'printf("FINALVOL2: omega=%g, maxSweeps=%d, threads=%d\\n", c.mgOmega, c.poissonIters, c.threads);',
-    'printf("FINALVOL2: smoothSweeps=%d, maxCycles=%d, threads=%d\\n", c.mgPostSmooth, c.poissonIters, c.threads);'
+    'printf("RMT_IMPROVED: omega=%g, maxSweeps=%d, threads=%d\\n", c.mgOmega, c.poissonIters, c.threads);',
+    'printf("RMT_IMPROVED: smoothSweeps=%d, maxCycles=%d, threads=%d\\n", c.mgPostSmooth, c.poissonIters, c.threads);'
 )
 s = s.replace("rbgs_omega,rbgs_max_sweeps", "rmt_smoothing_sweeps,rmt_max_cycles")
 s = s.replace(
@@ -211,7 +211,7 @@ s = s.replace(
 
 anchor = '    printf("Final mass residual:'
 diag = (
-    '    printf("RMT_FINALVOL2_DIAGNOSTICS levelsX=%d levelsY=%d direct_solves=%lld direct_unknowns=%lld '
+    '    printf("RMT_RMT_IMPROVED_DIAGNOSTICS levelsX=%d levelsY=%d direct_solves=%lld direct_unknowns=%lld '
     'lu_factorizations=%lld nonmonotone_cycles=%lld last_cycle_ratio=%.17g max_cycle_ratio=%.17g point_updates=%lld\\n",\n'
     '           g_rmtV2LastLevelX, g_rmtV2LastLevelY,\n'
     '           g_rmtV2DirectSolvesTotal, g_rmtV2DirectUnknownsTotal, g_rmtV2LUFactorizationsTotal,\n'
@@ -222,7 +222,7 @@ if anchor not in s:
     raise SystemExit("generation refused: final diagnostics anchor missing")
 s = s.replace(anchor, diag + anchor, 1)
 
-banner = "// RMT_FINALVOL2_GENERATED: frozen V95 physics/timestep; pressure linear solver only replaced by optimized Martynenko-style RMT.\n"
+banner = "// RMT_RMT_IMPROVED_GENERATED: frozen V95 physics/timestep; pressure linear solver only replaced by improved Martynenko-aligned RMT.\n"
 out.parent.mkdir(parents=True, exist_ok=True)
 out.write_text(banner + s)
 print(f"Generated {out} from frozen V95 SG reference ({len(s)} bytes)")
